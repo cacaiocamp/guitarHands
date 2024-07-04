@@ -10,7 +10,7 @@ def selectRoi(idSelected):
     cv2.setTrackbarPos('brightestSizeX', 'Roi', int(gvars.l_rois[idSelected].t_brightestRegionSize[0]))
     cv2.setTrackbarPos('brightestSizeY', 'Roi', int(gvars.l_rois[idSelected].t_brightestRegionSize[1]))
     cv2.setTrackbarPos('numBrightestRegions', 'Roi', int(gvars.l_rois[idSelected].numBrightestRegions))
-    cv2.setTrackbarPos('minDistBetweenPoints', 'Roi', int(gvars.l_rois[idSelected].minDistBetweenPoints))
+    cv2.setTrackbarPos('maxDistanceBetweenPoints', 'Roi', int(gvars.l_rois[idSelected].maxDistanceBetweenPoints))
 
     val = int(gvars.l_rois[idSelected].maxValFilterFactor * 100)
     cv2.setTrackbarPos('maxValFilterFactor', 'Roi', val)
@@ -44,8 +44,8 @@ def update_overRegionsFactor(val):
     fVal = float(val) / 100.0 
     gvars.l_rois[gvars.selectedRoiId].overRegionsFactor = fVal
 
-def update_minDistBetweenPoints(val):
-    gvars.l_rois[gvars.selectedRoiId].minDistBetweenPoints = val
+def update_maxDistanceBetweenPoints(val):
+    gvars.l_rois[gvars.selectedRoiId].maxDistanceBetweenPoints = val
 
 # GET funcs---------------------------------------------------------------------------------------------------
 def getAllFilteredRoi(id, frame, filterPerMaxVal = True, withinRegion = None):

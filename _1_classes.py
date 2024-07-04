@@ -61,17 +61,16 @@ class Region:
     def getCentroidAbsolutePosition(self):
         return (self.centroid[0] + self.l_points[0], self.centroid[1] + self.l_points[1])
 
-
 class Roi:
     def __init__(self, id):
         self.id = id
         self.l_points = []
         self.t_minMaxDepth = (0, 255)
         self.maxValFilterFactor = 3
+        self.maxDistanceBetweenPoints = 13
         self.t_brightestRegionSize = (30, 30)
         self.numBrightestRegions = 1
         self.overRegionsFactor = 0.25
-        self.minDistBetweenPoints = 13
         
         self.l_brightestRegionsFound = []
 

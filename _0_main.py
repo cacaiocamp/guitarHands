@@ -28,7 +28,7 @@ try:
     cv2.createTrackbar('brightestSizeY', 'Roi', 30, 100, funcs.update_brightestRegionY)
     cv2.createTrackbar('numBrightestRegions', 'Roi', 1, 10, funcs.update_numBrightestRegions)
     cv2.createTrackbar('overRegionsFactor', 'Roi', 25, 100, funcs.update_overRegionsFactor)
-    cv2.createTrackbar('minDistBetweenPoints', 'Roi', 40, 100, funcs.update_minDistBetweenPoints)
+    cv2.createTrackbar('maxDistanceBetweenPoints', 'Roi', 40, 100, funcs.update_maxDistanceBetweenPoints)
 
     cv2.namedWindow('SelectedRoiDepthFiltered')
 
@@ -79,7 +79,7 @@ try:
                             lastCentroidAbs = item.lastRegionFoundAsItem.getCentroidAbsolutePosition()
 
                             # busca o ponto mais proximo da regiao identificada e das ultimas predicoes de regioes
-                            closestBrightestRegion, closestBrightestRegionId, noCloseRegionFound = funcs.findClosestPoint(gvars.l_rois[item.l_orderedRois[item.curRoi]].l_brightestRegionsFound, np.array([lastCentroidAbs] + item.l_predictedCentroidsAbs))
+                            closestBrightestRegion, closestBrightestRegionId, noCloseRegionFound = funcs.findClosestPoint(gvars.l_rois[item.l_orderedRois[item.curRoi]].l_brightestRegionsFound, np.array([lastCentroidAbs] + item.l_predictedCentroidsAbs), gvars.l_rois[item.l_orderedRois[item.curRoi]].maxDistanceBetweenPoints)
                             
                             color = (0, 0, 255)
                             if(item.isChangingRoi):
