@@ -4,69 +4,57 @@ import _3_gvars as gvars
 
 # GUI funcs---------------------------------------------------------------------------------------------------
 def selectRoi(idSelected):
-    gvars.g_selectedRoi = idSelected
-    cv2.setTrackbarPos('minDepth', 'Roi', gvars.glist_rois[idSelected].t_minMaxDepth[0])
-    cv2.setTrackbarPos('maxDepth', 'Roi', gvars.glist_rois[idSelected].t_minMaxDepth[1])
-    cv2.setTrackbarPos('brightestSizeX', 'Roi', int(gvars.glist_rois[idSelected].t_brightestRegionSize[0]))
-    cv2.setTrackbarPos('brightestSizeY', 'Roi', int(gvars.glist_rois[idSelected].t_brightestRegionSize[1]))
-    cv2.setTrackbarPos('numBrightestRegions', 'Roi', int(gvars.glist_rois[idSelected].numBrightestRegions))
-    cv2.setTrackbarPos('minDistBetweenPoints', 'Roi', int(gvars.glist_rois[idSelected].minDistBetweenPoints))
+    gvars.selectedRoiId = idSelected
+    cv2.setTrackbarPos('minDepth', 'Roi', gvars.l_rois[idSelected].t_minMaxDepth[0])
+    cv2.setTrackbarPos('maxDepth', 'Roi', gvars.l_rois[idSelected].t_minMaxDepth[1])
+    cv2.setTrackbarPos('brightestSizeX', 'Roi', int(gvars.l_rois[idSelected].t_brightestRegionSize[0]))
+    cv2.setTrackbarPos('brightestSizeY', 'Roi', int(gvars.l_rois[idSelected].t_brightestRegionSize[1]))
+    cv2.setTrackbarPos('numBrightestRegions', 'Roi', int(gvars.l_rois[idSelected].numBrightestRegions))
+    cv2.setTrackbarPos('minDistBetweenPoints', 'Roi', int(gvars.l_rois[idSelected].minDistBetweenPoints))
 
-    val = int(gvars.glist_rois[idSelected].maxValFilterFactor * 100)
+    val = int(gvars.l_rois[idSelected].maxValFilterFactor * 100)
     cv2.setTrackbarPos('maxValFilterFactor', 'Roi', val)
-    val = int(gvars.glist_rois[idSelected].overRegionsFactor * 100)
+    val = int(gvars.l_rois[idSelected].overRegionsFactor * 100)
     cv2.setTrackbarPos('overRegionsFactor', 'Roi', val)
 
 def update_maxValFilterFactor(val):
     fVal = float(val) / 100.0 
-    gvars.glist_rois[gvars.g_selectedRoi].maxValFilterFactor = fVal
+    gvars.l_rois[gvars.selectedRoiId].maxValFilterFactor = fVal
 
 def update_minDepth(val):
-    newTuple = (val, + gvars.glist_rois[gvars.g_selectedRoi].t_minMaxDepth[1])
-    gvars.glist_rois[gvars.g_selectedRoi].t_minMaxDepth = newTuple
+    newTuple = (val, + gvars.l_rois[gvars.selectedRoiId].t_minMaxDepth[1])
+    gvars.l_rois[gvars.selectedRoiId].t_minMaxDepth = newTuple
 
 def update_maxDepth(val):
-    newTuple = (gvars.glist_rois[gvars.g_selectedRoi].t_minMaxDepth[0], val)
-    gvars.glist_rois[gvars.g_selectedRoi].t_minMaxDepth = newTuple
+    newTuple = (gvars.l_rois[gvars.selectedRoiId].t_minMaxDepth[0], val)
+    gvars.l_rois[gvars.selectedRoiId].t_minMaxDepth = newTuple
     
 def update_brightestRegionX(val):
-    newTuple = (val, + gvars.glist_rois[gvars.g_selectedRoi].t_brightestRegionSize[1])
-    gvars.glist_rois[gvars.g_selectedRoi].t_brightestRegionSize = newTuple
+    newTuple = (val, + gvars.l_rois[gvars.selectedRoiId].t_brightestRegionSize[1])
+    gvars.l_rois[gvars.selectedRoiId].t_brightestRegionSize = newTuple
 
 def update_brightestRegionY(val):
-    newTuple = (gvars.glist_rois[gvars.g_selectedRoi].t_brightestRegionSize[0], val)
-    gvars.glist_rois[gvars.g_selectedRoi].t_brightestRegionSize = newTuple
+    newTuple = (gvars.l_rois[gvars.selectedRoiId].t_brightestRegionSize[0], val)
+    gvars.l_rois[gvars.selectedRoiId].t_brightestRegionSize = newTuple
     
 def update_numBrightestRegions(val):
-    gvars.glist_rois[gvars.g_selectedRoi].numBrightestRegions = val
+    gvars.l_rois[gvars.selectedRoiId].numBrightestRegions = val
 
 def update_overRegionsFactor(val):
     fVal = float(val) / 100.0 
-    gvars.glist_rois[gvars.g_selectedRoi].overRegionsFactor = fVal
+    gvars.l_rois[gvars.selectedRoiId].overRegionsFactor = fVal
 
 def update_minDistBetweenPoints(val):
-    gvars.glist_rois[gvars.g_selectedRoi].minDistBetweenPoints = val
+    gvars.l_rois[gvars.selectedRoiId].minDistBetweenPoints = val
 
 # GET funcs---------------------------------------------------------------------------------------------------
-
-def computeCentroid(image):
-    moments = cv2.moments(image)
-    if moments["m00"] != 0:
-        cX = int(moments["m10"] / moments["m00"])
-        cY = int(moments["m01"] / moments["m00"])
-
-        centroidPos = (cX, cY)
-        return centroidPos
-    else:
-        return None
-    
-def getAllFilteredRoi(id, frame, filterMaxVal = 0, withinRegion = None):
+def getAllFilteredRoi(id, frame, filterPerMaxVal = True, withinRegion = None):
     roidFrame = frame.copy()
     filtered_image = frame.copy()
 
-    if gvars.glist_rois:
-        depthFilteredFrame = gvars.glist_rois[id].getDepthFilteredFrame(frame)
-        roidFrame = gvars.glist_rois[id].getRoiMaskedFrame(depthFilteredFrame)
+    if gvars.l_rois:
+        depthFilteredFrame = gvars.l_rois[id].getDepthFilteredFrame(frame)
+        roidFrame = gvars.l_rois[id].getRoiMaskedFrame(depthFilteredFrame)
 
         if withinRegion:
             mask = np.zeros_like(roidFrame, dtype=np.uint8)
@@ -76,9 +64,9 @@ def getAllFilteredRoi(id, frame, filterMaxVal = 0, withinRegion = None):
 
             roidFrame = cv2.bitwise_and(roidFrame, roidFrame, mask=mask)
 
-        if filterMaxVal != 0:
+        if filterPerMaxVal is True:
             max_depth_value = np.max(roidFrame)
-            threshold_value = max_depth_value - (max_depth_value/gvars.glist_rois[id].maxValFilterFactor) # - to do: transformar esse valor em variavel do Roi
+            threshold_value = max_depth_value - (max_depth_value/gvars.l_rois[id].maxValFilterFactor)
 
             # Threshold the depth image
             _, mask = cv2.threshold(roidFrame, threshold_value, 255, cv2.THRESH_BINARY)
@@ -90,101 +78,14 @@ def getAllFilteredRoi(id, frame, filterMaxVal = 0, withinRegion = None):
 
     return filtered_image
 
-# DRAW funcs---------------------------------------------------------------------------------------------------
-def drawRoiPoints(event, x, y, flags, param):
-    selectedRoi = gvars.g_selectedRoi
-
-    if event == cv2.EVENT_LBUTTONDOWN:
-        gvars.glist_rois[selectedRoi].l_points.append((x, y))
+def findClosestPoint(regions, targetCentroidsAbs, maxDistance = 50):
+    if not regions:
+        raise ValueError("Regions must be non-empty lists of the same length.")
     
-    elif event == cv2.EVENT_RBUTTONDOWN:
-        if len(gvars.glist_rois[selectedRoi].l_points) > 0:
-            gvars.glist_rois[selectedRoi].l_points.pop()
-
-def drawRoisOutlines(selectedRoi, frame):
-    for roi in gvars.glist_rois:
-        flag = True
-        for point in roi.l_points:
-            cv2.circle(frame, point, 3, (200, 200, 200), 4)
-            if flag:
-                flag = False
-                color = (200, 200, 200)
-                if roi.id == selectedRoi:
-                    color = gvars.roiSelectedColor
-                cv2.putText(frame, str(roi.id), point, cv2.FONT_HERSHEY_SIMPLEX, 0.75, color, 1, cv2.LINE_AA)
-        if len(roi.l_points) > 1:
-            color = (120, 120, 120)
-            if roi.id == selectedRoi:
-                color = gvars.roiSelectedColor
-            cv2.polylines(frame, [np.array(roi.l_points)], False, color, thickness=2)
-
-def drawAlreadyFoundRegionsAndCentroids(regions, centroids, frame, color = (180, 0, 180), thickness = 1):
-    i = 0
-    for region in regions:
-        x1, y1, x2, y2 = region
-        cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
-        if centroids[i] is not None:
-            cv2.circle(frame, (centroids[i][0] + x1, centroids[i][1] + y1), thickness, color, thickness)
-        cv2.putText(frame, str(i), (x1 - 5, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 1, color, thickness, cv2.LINE_AA)
-
-        i += 1
-
-def drawBrightestRegions(id, frameA, frameD):
-    if gvars.glist_rois:
-        brightestRegions = gvars.glist_rois[id].findBrightestRegions(frameA, gvars.glist_rois[id].numBrightestRegions, gvars.glist_rois[id].overRegionsFactor)
-
-        i = 0
-        colorRect = (0, 255, 0) # brightest
-        sizeRect = 2 # brightest
-        colorCentroid = (0, 255, 0) # brightest
-        sizeCentroid = 3
-
-        if len(brightestRegions) > 0:
-            for region in brightestRegions:
-                i += 1
-
-                x1, y1, x2, y2 = region
-                cv2.rectangle(frameD, (x1, y1), (x2, y2), colorRect, sizeRect)
-
-                region = frameA[y1:y2, x1:x2]
-
-                centroid = computeCentroid(region)
-
-                if centroid is not None:
-                    cv2.circle(frameD, (centroid[0] + x1, centroid[1] + y1), 3, colorCentroid, sizeCentroid)
-                if i == 1:
-                    colorRect = 255
-                    sizeRect = 0
-                    colorCentroid = (200, 200, 200)
-                    sizeCentroid = 0
-
-def getRegionsCentroid(frameA, l_regions):
-    l_centroids = []
-
-    if len(l_regions) > 0:
-        for region in l_regions:
-
-            x1, y1, x2, y2 = region
-
-            region = frameA[y1:y2, x1:x2]
-
-            centroid = computeCentroid(region)
-
-            #if centroid is not None:
-            #    l_centroids.append(centroid)
-            l_centroids.append(centroid)
-    
-    return l_centroids
-
-def findClosestPoint(centroids, regions, targetCentroidsAbs, maxDistance = 50):
-    if not centroids or not regions or len(centroids) != len(regions):
-        raise ValueError("Centroids and regions must be non-empty lists of the same length.")
-    
-    # Convert relative coordinates to absolute coordinates for the main centroids
     centroidsAbsolute = np.array([
-        (centroid[0] + region[0], centroid[1] + region[1]) 
-        for centroid, region in zip(centroids, regions)
-        if centroid is not None
+        (region.centroid[0] + region.l_points[0], region.centroid[1] + region.l_points[1]) 
+        for region in regions
+        if region.centroid is not None
     ])
     
     # Compute the pairwise distances between all target centroids and all main centroids
@@ -197,16 +98,15 @@ def findClosestPoint(centroids, regions, targetCentroidsAbs, maxDistance = 50):
     minDistance = distances[minIdx]
     
     # Get the closest centroid and region
-    closestCentroidIndex = minIdx[0]
-    closestRegion = regions[closestCentroidIndex]
-    closestCentroid = centroids[closestCentroidIndex]
+    closestRegionIndex = minIdx[0]
+    closestRegion = regions[closestRegionIndex]
 
     noCloseRegionsFound = False
 
     if maxDistance is not None and minDistance >= maxDistance:
         noCloseRegionsFound = True
     
-    return closestRegion, closestCentroid, closestCentroidIndex, noCloseRegionsFound
+    return closestRegion, closestRegionIndex, noCloseRegionsFound
 
 def predictNextCentroid(l_lastCentroids):
         if len(l_lastCentroids) < 2:
@@ -226,6 +126,63 @@ def predictNextCentroid(l_lastCentroids):
         next_y = np.polyval(coef_y, len(l_lastCentroids))
 
         return (int(next_x), int(next_y))
+
+# DRAW funcs---------------------------------------------------------------------------------------------------
+def drawRoiPoints(event, x, y, flags, param):
+    if event == cv2.EVENT_LBUTTONDOWN:
+        gvars.l_rois[gvars.selectedRoiId].l_points.append((x, y))
+    
+    elif event == cv2.EVENT_RBUTTONDOWN:
+        if len(gvars.l_rois[gvars.selectedRoiId].l_points) > 0:
+            gvars.l_rois[gvars.selectedRoiId].l_points.pop()
+
+def drawRoisOutlines(frameD, selectedRoi):
+    for roi in gvars.l_rois:
+        flag = True
+        for point in roi.l_points:
+            cv2.circle(frameD, point, 3, (200, 200, 200), 4)
+            if flag:
+                flag = False
+                color = (200, 200, 200)
+                if roi.id == selectedRoi:
+                    color = gvars.roiSelectedColor
+                cv2.putText(frameD, str(roi.id), point, cv2.FONT_HERSHEY_SIMPLEX, 0.75, color, 1, cv2.LINE_AA)
+        if len(roi.l_points) > 1:
+            color = (120, 120, 120)
+            if roi.id == selectedRoi:
+                color = gvars.roiSelectedColor
+            cv2.polylines(frameD, [np.array(roi.l_points)], False, color, thickness=2)
+
+def drawAlreadyFoundRegionsAndCentroids(frameD, regions, color = (180, 0, 180), thickness = 1):
+    i = 0
+    for region in regions:
+        x1, y1, x2, y2 = region.l_points
+
+        region.draw(frameD, color, thickness, color, thickness)
+
+        cv2.putText(frameD, str(i), (x1 - 5, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 1, color, thickness, cv2.LINE_AA)
+
+        i += 1
+
+def drawBrightestRegions(frameD, l_regionsToDraw):
+    i = 0
+    colorRect = (0, 255, 0) # brightest
+    sizeRect = 2 # brightest
+    colorCentroid = (0, 255, 0) # brightest
+    sizeCentroid = 3
+
+    if len(l_regionsToDraw) > 0:
+        for region in l_regionsToDraw:
+            i += 1
+
+            #frameD, colorReg, thicknessReg, colorCentroid, sizeCentroid
+            region.draw(frameD, colorRect, sizeRect, colorCentroid, sizeCentroid)
+
+            if i == 1:
+                colorRect = 255
+                sizeRect = 0
+                colorCentroid = (200, 200, 200)
+                sizeCentroid = 0
 
 
 
@@ -247,7 +204,7 @@ def getOverlapBetweenTwoRegions(region1, region2):
 
 def isRegionClustered(regionsToSearch, mainRegionId, overlapThreshold = 0, minRegionsForCluster = 2):
     if overlapThreshold == 0:
-        overlapThreshold = gvars.glist_rois[mainRegionId].overRegionsFactor - (gvars.glist_rois[mainRegionId].overRegionsFactor / 10)
+        overlapThreshold = gvars.l_rois[mainRegionId].overRegionsFactor - (gvars.l_rois[mainRegionId].overRegionsFactor / 10)
         
     mainRegionArea = (regionsToSearch[mainRegionId][2] - regionsToSearch[mainRegionId][0]) * (regionsToSearch[mainRegionId][3] - regionsToSearch[mainRegionId][1])
     overlapCount = 0

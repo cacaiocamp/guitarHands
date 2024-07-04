@@ -19,8 +19,7 @@ class ItemToTrack:
         self.l_lastCentroidsAbs = []
         self.l_predictedCentroidsAbs = []
 
-        self.l_lastRegionFound = []
-        self.lastRegionCentroid = (-1, -1)
+        self.lastRegionFoundAsItem = None
 
         self.l_directedRegionToSearch = []
 
@@ -31,9 +30,37 @@ class ItemToTrack:
         self.l_orderedRois = l_newRois
 
 class Region:
-    def __init__(self, points, centroid):
+    def __init__(self, points, centroid = None):
         self.l_points = points
         self.centroid = centroid
+
+    def computeCentroid(self, frameAnalysis):
+        x1, y1, x2, y2 = self.l_points
+
+        region = frameAnalysis[y1:y2, x1:x2]
+        
+        moments = cv2.moments(region)
+        if moments["m00"] != 0:
+            cX = int(moments["m10"] / moments["m00"])
+            cY = int(moments["m01"] / moments["m00"])
+
+            self.centroid = (cX, cY)
+        else:
+            self.centroid = None
+        
+        return self.centroid
+            
+    def draw(self, frameD, colorReg = (180, 0, 180), thicknessReg = 1, colorCentroid = (180, 0, 180), sizeCentroid = 1):
+        x1, y1, x2, y2 = self.l_points
+
+        cv2.rectangle(frameD, (x1, y1), (x2, y2), colorReg, thicknessReg)
+
+        if self.centroid is not None:
+            cv2.circle(frameD, (self.centroid[0] + x1, self.centroid[1] + y1), sizeCentroid, colorCentroid, 1)
+    
+    def getCentroidAbsolutePosition(self):
+        return (self.centroid[0] + self.l_points[0], self.centroid[1] + self.l_points[1])
+
 
 class Roi:
     def __init__(self, id):
@@ -45,6 +72,8 @@ class Roi:
         self.numBrightestRegions = 1
         self.overRegionsFactor = 0.25
         self.minDistBetweenPoints = 13
+        
+        self.l_brightestRegionsFound = []
 
     def eraseAllPoints(self):
         self.l_points = []
@@ -86,39 +115,19 @@ class Roi:
         filtered_frame = np.where(mask, inverted_normalized_frame, 0).astype(np.uint8)
     
         return filtered_frame
+    
+    def getRegionsCentroid(self, frameA, l_regions):
+        l_centroids = []
 
-    def findBrightestRegion(self, frame):
-        if self.l_points:
-            x_values = [point[0] for point in self.l_points]
-            y_values = [point[1] for point in self.l_points]
-            x_min, x_max = min(x_values), max(x_values)
-            y_min, y_max = min(y_values), max(y_values)
-
-            max_average_brightness = 0
-            brightest_region = None
-
-            Nx = self.t_brightestRegionSize[0]
-            Ny = self.t_brightestRegionSize[1]
-
-            # Iterate over each NxN pixel block within the ROI
-            for y in range(y_min, y_max - Ny, Ny):
-                for x in range(x_min, x_max - Nx, Nx):
-                    # Get the NxN block
-                    block = frame[y:y+Ny, x:x+Nx]
-                    
-                    # Calculate the average brightness of the block
-                    average_brightness = np.mean(block)
-                    
-                    # Check if this block is brighter than the previous brightest region
-                    if average_brightness > max_average_brightness:
-                        max_average_brightness = average_brightness
-                        brightest_region = (x, y, x+Nx, y+Ny)
-
-            return brightest_region
-        else:
-            return None
+        if len(l_regions) > 0:
+            for region in l_regions:
+                centroid = region.computeCentroid(frameA)
+                
+                l_centroids.append(centroid)
         
-    def findBrightestRegions(self, frame, num_regions=2, overlap_threshold=0.25):
+        return l_centroids
+    
+    def findBrightestRegions(self, frame, num_regions, overlap_threshold):
         if (not self.l_points) | (len(self.l_points) < 3):
             return []
 
@@ -145,13 +154,13 @@ class Roi:
 
         # Create a mask to keep track of valid regions
         mask = np.ones(mean_brightness.shape, dtype=bool)
-        brightest_regions = []
+        l_brightestRegions = []
 
         # Create grid of coordinates for the top-left corners of each block
         y_coords, x_coords = np.meshgrid(np.arange(mean_brightness.shape[0]), np.arange(mean_brightness.shape[1]), indexing='ij')
 
         for idx in flat_indices:
-            if len(brightest_regions) >= num_regions:
+            if len(l_brightestRegions) >= num_regions:
                 break
 
             y, x = np.unravel_index(idx, mean_brightness.shape)
@@ -160,7 +169,7 @@ class Roi:
 
             # Calculate the coordinates of the region in the original frame
             region = (x_min + x, y_min + y, x_min + x + Nx, y_min + y + Ny)
-            brightest_regions.append(region)
+            l_brightestRegions.append(region)
 
             # Calculate the bounding box of the area to invalidate
             x_start = max(0, x - Nx + 1)
@@ -188,4 +197,14 @@ class Roi:
             # Invalidate regions that have significant overlap
             mask[y_start:y_end, x_start:x_end] &= (overlap_percent < overlap_threshold)
 
-        return brightest_regions
+        self.l_brightestRegionsFound = []
+        l_centroids = []
+
+        for brightestRegion in l_brightestRegions:
+            newRegion = Region(brightestRegion)
+            regionCentroid = newRegion.computeCentroid(frame)
+            self.l_brightestRegionsFound.append(newRegion)
+
+            l_centroids.append(regionCentroid)
+
+        return l_brightestRegions, l_centroids

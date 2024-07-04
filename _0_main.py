@@ -40,17 +40,6 @@ try:
             raise Exception("Error: Failed to read frame from camera.")
         
         frame = gvars.virginFrame.copy()
-        l_alreadyRenderedRois = []
-
-        # vfilteredFrame = funcs.getAllFilteredRoi(gvars.g_selectedRoi, frame)
-        # # Normalize the filtered frame for display purposes
-        # vnormalized_frame = cv2.normalize(vfilteredFrame, None, 0, 255, cv2.NORM_MINMAX)
-        # vnormalized_frame = np.uint8(vnormalized_frame)
-
-        # cv2.putText(gvars.virginFrame, str(gvars.g_selectedRoi), (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, gvars.roiSelectedColor, 2, cv2.LINE_AA)
-
-        # funcs.drawRoisOutlines(gvars.g_selectedRoi, gvars.virginFrame)
-        # funcs.drawTest(gvars.g_selectedRoi, vnormalized_frame, gvars.virginFrame)
         
         frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
@@ -58,6 +47,8 @@ try:
 
         height, width = frame.shape[:2]
         allRois_frame = np.zeros((height, width), dtype=np.uint8)
+
+        l_alreadyRenderedRois = []
 
         if gvars.itemTrackingLoop:
             for item in gvars.l_itensToTrack:
@@ -69,41 +60,33 @@ try:
                         allRois_frame = funcs.getAllFilteredRoi(item.l_orderedRois[item.curRoi], clahe_frame, gvars.filterPerBrightest)
                         roied_clahe_normalized_frame = cv2.normalize(allRois_frame, None, 0, 255, cv2.NORM_MINMAX)
                         roied_clahe_normalized_frame = np.uint8(roied_clahe_normalized_frame)
-
+                        
+                        l_brightestRegions = gvars.l_rois[item.l_orderedRois[item.curRoi]].findBrightestRegions(
+                            roied_clahe_normalized_frame, 
+                            gvars.l_rois[item.l_orderedRois[item.curRoi]].numBrightestRegions,
+                            gvars.l_rois[item.l_orderedRois[item.curRoi]].overRegionsFactor
+                        )
+                        
                     if item.isBrightestForSure:
-                        l_brightestRegions = gvars.glist_rois[item.l_orderedRois[item.curRoi]].findBrightestRegions(roied_clahe_normalized_frame, 1)
-
-                        if (l_brightestRegions is not None) & (l_brightestRegions is not []):
-                            brightestRegion = l_brightestRegions[0]
-
-                            x1, y1, x2, y2 = brightestRegion
-                            region = roied_clahe_normalized_frame[y1:y2, x1:x2]
-                            centroid = funcs.computeCentroid(region)
-
-                            item.l_lastRegionFound = brightestRegion
-                            item.lastRegionCentroid = centroid
+                        if (gvars.l_rois[item.l_orderedRois[item.curRoi]].l_brightestRegionsFound is not None) & (gvars.l_rois[item.l_orderedRois[item.curRoi]].l_brightestRegionsFound is not []):      
+                            item.lastRegionFoundAsItem = gvars.l_rois[item.l_orderedRois[item.curRoi]].l_brightestRegionsFound[0]
                             item.lastRegionAsBasis = True
                             
-                            funcs.drawAlreadyFoundRegionsAndCentroids(l_brightestRegions, [centroid], gvars.virginFrame)
+                            funcs.drawAlreadyFoundRegionsAndCentroids(gvars.virginFrame, gvars.l_rois[item.l_orderedRois[item.curRoi]].l_brightestRegionsFound)
+
                     elif (item.isBrightestForSure is not True) & (item.lastRegionAsBasis):
-                        l_brightestRegions = gvars.glist_rois[item.l_orderedRois[item.curRoi]].findBrightestRegions(roied_clahe_normalized_frame, gvars.glist_rois[item.l_orderedRois[item.curRoi]].numBrightestRegions + item.timeNotFindingCloseRegion, gvars.glist_rois[item.l_orderedRois[item.curRoi]].overRegionsFactor)                     
-                        l_centroids = []
+                        if len(gvars.l_rois[item.l_orderedRois[item.curRoi]].l_brightestRegionsFound) > 0:  
+                            lastCentroidAbs = item.lastRegionFoundAsItem.getCentroidAbsolutePosition()
 
-                        if len(l_brightestRegions) > 0:  
-                            l_centroids = funcs.getRegionsCentroid(roied_clahe_normalized_frame, l_brightestRegions)
-                            lastCentroidAbs = (item.lastRegionCentroid[0] + item.l_lastRegionFound[0], item.lastRegionCentroid[1] + item.l_lastRegionFound[1]) 
-
-                            # busca o ponto mais proximo da regiao identificada ou das ultimas predicoes de regioes
-                            closestBrightestRegion, closestBrightestRegionCentroid, closestRegionCentroidId, noCloseRegionFound = funcs.findClosestPoint(l_centroids, l_brightestRegions, np.array([lastCentroidAbs] + item.l_predictedCentroidsAbs))
+                            # busca o ponto mais proximo da regiao identificada e das ultimas predicoes de regioes
+                            closestBrightestRegion, closestBrightestRegionId, noCloseRegionFound = funcs.findClosestPoint(gvars.l_rois[item.l_orderedRois[item.curRoi]].l_brightestRegionsFound, np.array([lastCentroidAbs] + item.l_predictedCentroidsAbs))
                             
                             color = (0, 0, 255)
-
                             if(item.isChangingRoi):
                                 color = (180, 255, 180)
 
                             # se nao encontrar regiao perto o suficiente
                             if (noCloseRegionFound) & (item.timeNotFindingCloseRegion <= gvars.maxTimeNotFindingCloseRegion) & (item.isChangingRoi is not True):
-                                x1, y1, x2, y2 = l_brightestRegions[closestRegionCentroidId]
                                 color = (255, 0, 0)
 
                                 # prediz a posicao onde o item deveria estar
@@ -115,41 +98,34 @@ try:
                                     
                                 item.timeNotFindingCloseRegion += 1
                             else: # se encontrar, 
-                                x1, y1, x2, y2 = l_brightestRegions[closestRegionCentroidId]
-
-                                item.l_lastRegionFound = closestBrightestRegion
-                                item.lastRegionCentroid = closestBrightestRegionCentroid
+                                item.lastRegionFoundAsItem = closestBrightestRegion
 
                                 item.timeNotFindingCloseRegion = 0
                                 item.l_predictedCentroidsAbs = []
 
-                            funcs.drawAlreadyFoundRegionsAndCentroids(l_brightestRegions, l_centroids, gvars.virginFrame)
-                            
-                            x1, y1, x2, y2 = item.l_lastRegionFound
-                            cv2.rectangle(gvars.virginFrame, (x1, y1), (x2, y2), color, 4)
-                            cv2.circle(gvars.virginFrame, (item.lastRegionCentroid[0] + x1, item.lastRegionCentroid[1] + y1), 3, color, 4)
-                                        
+                            item.lastRegionFoundAsItem.draw(gvars.virginFrame, color, 4, color, 4)
+
                             if item.type == "r":
-                                x1, y1, x2, y2 = item.l_lastRegionFound
+                                x1, y1, x2, y2 = item.lastRegionFoundAsItem.l_points
                                 cv2.putText(gvars.virginFrame, gvars.itemTypeDictionary[item.type], (x2, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 1, (180, 180, 255), 2, cv2.LINE_AA)
                             
                                 if item.isProjecting:
-                                    client.send_message("/rh/pointX", int(closestBrightestRegionCentroid[0] + x1))
-                                    client.send_message("/rh/pointY", int(closestBrightestRegionCentroid[1] + y1))
+                                    client.send_message("/rh/pointX", int(item.lastRegionFoundAsItem.centroid[0] + x1))
+                                    client.send_message("/rh/pointY", int(item.lastRegionFoundAsItem.centroid[1] + y1))
                             elif item.type == "l":
-                                x1, y1, x2, y2 = item.l_lastRegionFound
+                                x1, y1, x2, y2 = item.lastRegionFoundAsItem.l_points
                                 cv2.putText(gvars.virginFrame, gvars.itemTypeDictionary[item.type], (x2, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 1, (180, 180, 255), 2, cv2.LINE_AA)
                             
                                 if item.isProjecting:
-                                    client.send_message("/lh/pointX", int(closestBrightestRegionCentroid[0] + x1))
-                                    client.send_message("/lh/pointY", int(closestBrightestRegionCentroid[1] + y1))
+                                    client.send_message("/lh/pointX", int(item.lastRegionFoundAsItem.centroid[0] + x1))
+                                    client.send_message("/lh/pointY", int(item.lastRegionFoundAsItem.centroid[1] + y1))
                             elif item.type == "v":
-                                x1, y1, x2, y2 = item.l_lastRegionFound
+                                x1, y1, x2, y2 = item.lastRegionFoundAsItem.l_points
                                 cv2.putText(gvars.virginFrame, gvars.itemTypeDictionary[item.type], (x2, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 1, (180, 180, 255), 2, cv2.LINE_AA)
                             
                                 if item.isProjecting:
-                                    client.send_message("/vl/pointX", int(closestBrightestRegionCentroid[0] + x1))
-                                    client.send_message("/vl/pointY", int(closestBrightestRegionCentroid[1] + y1))
+                                    client.send_message("/vl/pointX", int(item.lastRegionFoundAsItem.centroid[0] + x1))
+                                    client.send_message("/vl/pointY", int(item.lastRegionFoundAsItem.centroid[1] + y1))
 
                             if item.isChangingRoi:
                                 if item.timeChangingRoi < gvars.maxTimeChangingRoi:
@@ -159,38 +135,45 @@ try:
                                     item.isChangingRoi = False
                                     
                             if len(item.l_lastCentroidsAbs) < gvars.lastCentroidsForPredictionNum:
-                                x1, y1, x2, y2 = item.l_lastRegionFound
-                                centroidAbs = (item.lastRegionCentroid[0] + x1, item.lastRegionCentroid[1] + y1)
+                                x1, y1, x2, y2 = item.lastRegionFoundAsItem.l_points
+                                centroidAbs = item.lastRegionFoundAsItem.getCentroidAbsolutePosition()
                                 item.l_lastCentroidsAbs.append(centroidAbs)
                             else:
                                 item.l_lastCentroidsAbs.pop(0)
-                                x1, y1, x2, y2 = item.l_lastRegionFound
-                                centroidAbs = (item.lastRegionCentroid[0] + x1, item.lastRegionCentroid[1] + y1)
+                                x1, y1, x2, y2 = item.lastRegionFoundAsItem.l_points
+                                centroidAbs = item.lastRegionFoundAsItem.getCentroidAbsolutePosition()
                                 item.l_lastCentroidsAbs.append(centroidAbs)
-
                     
+                    funcs.drawAlreadyFoundRegionsAndCentroids(gvars.virginFrame, gvars.l_rois[item.l_orderedRois[item.curRoi]].l_brightestRegionsFound)
+
                     l_alreadyRenderedRois.append(item.l_orderedRois[item.curRoi])
                             
-        else: # se nao tive items a procurar, desenha regioes relacionadas ao roi selecionado
-            allRois_frame = funcs.getAllFilteredRoi(gvars.g_selectedRoi, clahe_frame, gvars.filterPerBrightest)
-            cnormalized_frame = cv2.normalize(allRois_frame, None, 0, 255, cv2.NORM_MINMAX)
-            cnormalized_frame = np.uint8(cnormalized_frame)
+        else: # se nao tiver items a procurar, desenha regioes relacionadas ao roi selecionado
+            if gvars.selectedRoiId is not None:
+                allRois_frame = funcs.getAllFilteredRoi(gvars.selectedRoiId, clahe_frame, gvars.filterPerBrightest)
+                cnormalized_frame = cv2.normalize(allRois_frame, None, 0, 255, cv2.NORM_MINMAX)
+                cnormalized_frame = np.uint8(cnormalized_frame)
 
-            funcs.drawBrightestRegions(gvars.g_selectedRoi, cnormalized_frame, gvars.virginFrame)
+                gvars.l_rois[gvars.selectedRoiId].findBrightestRegions(
+                    cnormalized_frame, 
+                    gvars.l_rois[gvars.selectedRoiId].numBrightestRegions,
+                    gvars.l_rois[gvars.selectedRoiId].overRegionsFactor
+                )
+
+                funcs.drawBrightestRegions(gvars.virginFrame, gvars.l_rois[gvars.selectedRoiId].l_brightestRegionsFound)
 
         # desenha contornos dos Rois
-        funcs.drawRoisOutlines(gvars.g_selectedRoi, gvars.virginFrame)
-        cv2.putText(gvars.virginFrame, str(gvars.g_selectedRoi), (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, gvars.roiSelectedColor, 2, cv2.LINE_AA)
+        funcs.drawRoisOutlines(gvars.virginFrame, gvars.selectedRoiId, )
+        cv2.putText(gvars.virginFrame, str(gvars.selectedRoiId), (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, gvars.roiSelectedColor, 2, cv2.LINE_AA)
 
         for item in gvars.l_itensToTrack:
             if item.isActive & item.lastRegionAsBasis:
-                x1, y1, x2, y2 = item.l_lastRegionFound
-                cv2.rectangle(clahe_frame, (x1, y1), (x2, y2), (180, 0, 180), 1)
-                cv2.circle(clahe_frame, (item.lastRegionCentroid[0] + x1, item.lastRegionCentroid[1] + y1), 3, (220, 220, 0), 1)
+                x1, y1, x2, y2 = item.lastRegionFoundAsItem.l_points
+
+                item.lastRegionFoundAsItem.draw(clahe_frame, (180, 0, 180), 1, (220, 220, 0), 3)
                 cv2.putText(clahe_frame, str(item.type), (x1 - 10, y1), cv2.FONT_HERSHEY_SIMPLEX, 1, gvars.roiSelectedColor, 2, cv2.LINE_AA)
 
-                cv2.rectangle(allRois_frame, (x1, y1), (x2, y2), (180, 0, 180), 1)
-                cv2.circle(allRois_frame, (item.lastRegionCentroid[0] + x1, item.lastRegionCentroid[1] + y1), 3, (220, 220, 0), 1)
+                item.lastRegionFoundAsItem.draw(allRois_frame, (180, 0, 180), 1, (220, 220, 0), 3)
                 cv2.putText(allRois_frame, str(item.type), (x1 - 10, y1), cv2.FONT_HERSHEY_SIMPLEX, 1, gvars.roiSelectedColor, 2, cv2.LINE_AA)
 
         cv2.imshow('clahe - preprocessedImage', clahe_frame)
@@ -204,26 +187,26 @@ try:
         elif key in range(ord('1'), ord('9')):  
             keyIntVal = int(chr(key))
             
-            if(len(gvars.glist_rois) >= keyIntVal):
+            if(len(gvars.l_rois) >= keyIntVal):
                 funcs.selectRoi(keyIntVal - 1)
             else:
-                print(f"somente {len(gvars.glist_rois)} rois existem. Criando mais um...")
-                gvars.glist_rois.append(classes.Roi(len(gvars.glist_rois)))
-                gvars.g_selectedRoi = len(gvars.glist_rois) - 1
+                print(f"somente {len(gvars.l_rois)} rois existem. Criando mais um...")
+                gvars.l_rois.append(classes.Roi(len(gvars.l_rois)))
+                gvars.selectedRoiId = len(gvars.l_rois) - 1
         elif key == ord('d'):
-            gvars.glist_rois[gvars.g_selectedRoi].eraseAllPoints()
+            gvars.l_rois[gvars.selectedRoiId].eraseAllPoints()
         elif key == ord('p'):
             with open('savedRois.pkl', 'wb') as file:
-                pickle.dump(gvars.glist_rois, file)
-                print(gvars.glist_rois)
+                pickle.dump(gvars.l_rois, file)
+                print(gvars.l_rois)
                 print("saved rois file--------------------")
         elif key == ord('ç'):
             with open('savedRois.pkl', 'rb') as file:
-                gvars.glist_rois = pickle.load(file)
+                gvars.l_rois = pickle.load(file)
                 print("loaded rois file--------------------")
 
-                if len(gvars.glist_rois) > 0:
-                    gvars.g_selectedRoi = 0
+                if len(gvars.l_rois) > 0:
+                    gvars.selectedRoiId = 0
         elif key == ord(' '):
             gvars.itemTrackingLoop = not gvars.itemTrackingLoop 
         elif key == ord('y'): # rightHand

@@ -1,7 +1,7 @@
 # globalVars
-glist_rois = []
+l_rois = []
 l_itensToTrack = []
-g_selectedRoi = None
+selectedRoiId = None
 virginFrame = None
 filterPerBrightest = True
 
