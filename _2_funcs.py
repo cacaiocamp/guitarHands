@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import math
 import _3_gvars as gvars
 
 # GUI funcs---------------------------------------------------------------------------------------------------
@@ -126,6 +127,35 @@ def predictNextCentroid(l_lastCentroids):
         next_y = np.polyval(coef_y, len(l_lastCentroids))
 
         return (int(next_x), int(next_y))
+
+def moveAllRois(moveX = 0, moveY = 0):
+    for indexRoi, roi in enumerate(gvars.l_rois):
+        for indexPoint, point in enumerate(roi.l_points):
+            x, y = gvars.l_rois[indexRoi].l_points[indexPoint]
+            gvars.l_rois[indexRoi].l_points[indexPoint] = (x + moveX, y + moveY)
+
+def rotatePoint(point, center, dangle):
+    angle_rad = math.radians(dangle)
+    
+    # Translate point to origin
+    temp_x = point[0] - center[0]
+    temp_y = point[1] - center[1]
+    
+    # Perform rotation
+    rotated_x = temp_x * math.cos(angle_rad) - temp_y * math.sin(angle_rad)
+    rotated_y = temp_x * math.sin(angle_rad) + temp_y * math.cos(angle_rad)
+    
+    # Translate point back
+    new_x = rotated_x + center[0]
+    new_y = rotated_y + center[1]
+    
+    return (int(new_x), int(new_y))
+
+def rotateAllRois(dangle, center):
+    for indexRoi, roi in enumerate(gvars.l_rois):
+        for indexPoint, point in enumerate(roi.l_points):
+            x, y = gvars.l_rois[indexRoi].l_points[indexPoint]
+            gvars.l_rois[indexRoi].l_points[indexPoint] = rotatePoint((x, y), center, dangle)
 
 # DRAW funcs---------------------------------------------------------------------------------------------------
 def drawRoiPoints(event, x, y, flags, param):

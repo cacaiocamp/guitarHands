@@ -8,6 +8,8 @@ selectedRoiId = None
 virginFrame = None
 filterPerBrightest = True
 
+moveorrotate = 0
+
 maxTimeChangingRoi = 4
 maxTimeNotFindingCloseRegion = 10
 lastCentroidsForPredictionNum = 20

@@ -22,6 +22,7 @@ def pedal0():
     gvars.l_itensToTrack[0].curRoi = 0
     gvars.l_itensToTrack[0].isActive = True
     gvars.l_itensToTrack[0].isBrightestForSure = True
+    gvars.itemTrackingLoop = True
 def pedal1():
     print("--- pedal 1 --------------------")
     # ativa troca por sobreposicao para roi 1 na MD

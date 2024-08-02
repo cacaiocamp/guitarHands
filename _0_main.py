@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import pickle
+from pynput import keyboard
 from pythonosc import udp_client
 import _1_classes as classes
 import _2_funcs as funcs
@@ -13,6 +14,43 @@ client = udp_client.SimpleUDPClient(ip, port)
 
 gvars.l_itensToTrack.append(classes.ItemToTrack("r", gvars.l_rightHandRois))
 gvars.l_itensToTrack.append(classes.ItemToTrack("l", gvars.l_leftHandRois))
+
+arrow_keys = {
+    'left': False,
+    'up': False,
+    'right': False,
+    'down': False
+}
+
+# Define callback functions for key press and release
+def on_press(akey):
+    try:
+        if akey == keyboard.Key.left:
+            arrow_keys['left'] = True
+        elif akey == keyboard.Key.up:
+            arrow_keys['up'] = True
+        elif akey == keyboard.Key.right:
+            arrow_keys['right'] = True
+        elif akey == keyboard.Key.down:
+            arrow_keys['down'] = True
+    except AttributeError:
+        pass
+
+def on_release(akey):
+    try:
+        if akey == keyboard.Key.left:
+            arrow_keys['left'] = False
+        elif akey == keyboard.Key.up:
+            arrow_keys['up'] = False
+        elif akey == keyboard.Key.right:
+            arrow_keys['right'] = False
+        elif akey == keyboard.Key.down:
+            arrow_keys['down'] = False
+    except AttributeError:
+        pass
+
+listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+listener.start()
 
 try:
     cap = cv2.VideoCapture(1)
@@ -120,6 +158,7 @@ try:
 
                             if item.overlapJumpToNextRoi:
                                 item.checkItemInNextRoiOverlap()
+                                item.getImageFrameWithRoiOverlap(gvars.virginFrame)
 
                             if item.type == "r":
                                 x1, y1, x2, y2 = item.lastRegionFoundAsItem.l_points
@@ -239,6 +278,10 @@ try:
             pedals.callPedalEvent(gvars.curPedal)
         elif key == ord('/'):
             print('a')
+        elif key == ord('r'): 
+            gvars.moveorrotate = not gvars.moveorrotate
+
+
         elif key == ord(' '):
             gvars.itemTrackingLoop = not gvars.itemTrackingLoop 
         elif key == ord('y'): # rightHand
@@ -259,22 +302,6 @@ try:
         elif key == ord('k'): # voluta
             if len(gvars.l_itensToTrack) >= 3:
                 gvars.l_itensToTrack[2].isBrightestForSure = not gvars.l_itensToTrack[2].isBrightestForSure
-        elif key == ord('b'): 
-            gvars.filterPerBrightest = not gvars.filterPerBrightest
-        elif key == ord('w'): 
-            if len(gvars.l_itensToTrack) >= 1:
-                gvars.l_itensToTrack[0].l_orderedRois = [1]
-                gvars.l_itensToTrack[0].isChangingRoi = True
-        elif key == ord('e'): 
-            if len(gvars.l_itensToTrack) >= 1:
-                gvars.l_itensToTrack[0].l_orderedRois = [0]
-        elif key == ord('r'): 
-            if len(gvars.l_itensToTrack) >= 2:
-                gvars.l_itensToTrack[1].l_orderedRois = [1]
-                gvars.l_itensToTrack[1].isChangingRoi = True
-        elif key == ord('t'): 
-            if len(gvars.l_itensToTrack) >= 2:
-                gvars.l_itensToTrack[1].l_orderedRois = [0]
         elif key == ord('x'): # rightHand
             if len(gvars.l_itensToTrack) >= 1:
                 gvars.curItem = 0
@@ -314,6 +341,21 @@ try:
 
                 item.timeNotFindingCloseRegion = 0
                 item.l_predictedCentroidsAbs = []
+        
+        if arrow_keys['left']:
+            if gvars.moveorrotate == 0:
+                funcs.moveAllRois(-1, 0)
+            elif gvars.moveorrotate == 1:
+                funcs.rotateAllRois(-1, (int(width/2), int(height/2)))
+        if arrow_keys['up']:
+            funcs.moveAllRois(0, -1)
+        if arrow_keys['right']:
+            if gvars.moveorrotate == 0:
+                funcs.moveAllRois(1, 0)
+            elif gvars.moveorrotate == 1:
+                funcs.rotateAllRois(1, (int(width/2), int(height/2)))
+        if arrow_keys['down']:
+            funcs.moveAllRois(0, 1)
 
 except Exception as e:
     print(f"An error occurred: {e}")
@@ -325,3 +367,4 @@ finally:
     
     # Close all OpenCV windows
     cv2.destroyAllWindows()
+    listener.stop()
