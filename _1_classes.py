@@ -1,5 +1,6 @@
 import numpy as np
 import cv2
+import _3_gvars as gvars
 from skimage.util.shape import view_as_windows
 
 class ItemToTrack:
@@ -20,6 +21,10 @@ class ItemToTrack:
         self.l_predictedCentroidsAbs = []
 
         self.lastRegionFoundAsItem = None
+        self.lastRegionFoundAsItemId = -1
+
+        self.overlapJumpToNextRoi = False
+        self.overlappingAreaWithNextRoiMask = None
 
         self.l_directedRegionToSearch = []
 
@@ -29,10 +34,92 @@ class ItemToTrack:
     def changeRois(self, l_newRois):
         self.l_orderedRois = l_newRois
 
+    def allowOverlapRoiChange(self):
+        self.overlapJumpToNextRoi = True
+
+        currentRoiId = self.l_orderedRois[self.curRoi]
+        nextRoiId = self.l_orderedRois[self.curRoi + 1]
+
+        currentRoiPolygon = gvars.l_rois[currentRoiId].getLPointsAsPolygon()
+        nextRoiPolygon = gvars.l_rois[nextRoiId].getLPointsAsPolygon()
+
+        overlap_mask, overlap_area = self.calculate_polygon_overlap(currentRoiPolygon, nextRoiPolygon, gvars.frameShape)
+
+        if overlap_area <= 0:
+            raise ValueError("No overlapping area between Rois.")
+        else:
+            self.overlappingAreaWithNextRoiMask = overlap_mask
+
+    def calculate_polygon_overlap(self, polygon1, polygon2, image_shape):
+        if not polygon1.size or not polygon2.size:
+            raise ValueError("One or both polygons are empty.")
+        
+        # Create masks for the two polygons
+        mask1 = np.zeros(image_shape, dtype=np.uint8)
+        mask2 = np.zeros(image_shape, dtype=np.uint8)
+        
+        cv2.fillPoly(mask1, [polygon1], 255)
+        cv2.fillPoly(mask2, [polygon2], 255)
+        
+        # Calculate overlap
+        overlap = cv2.bitwise_and(mask1, mask2)
+        overlap_area = np.sum(overlap > 0)
+        
+        return overlap, overlap_area
+    
+    def checkItemInNextRoiOverlap(self, overlapPercentMin = 35):
+        x1, y1, x2, y2 = self.lastRegionFoundAsItem.l_points
+
+        # Ensure coordinates are within bounds
+        if x1 < 0 or y1 < 0 or x2 > self.overlappingAreaWithNextRoiMask.shape[1] or y2 > self.overlappingAreaWithNextRoiMask.shape[0]:
+            print("Region coordinates are out of bounds of the overlap mask.")
+
+        # Extract the part of the overlap mask that corresponds to the region
+        region_mask = self.overlappingAreaWithNextRoiMask[y1:y2, x1:x2]
+
+        # Calculate the area of the region
+        region_area = (x2 - x1) * (y2 - y1)
+
+        # Calculate the overlap area (non-zero pixels in the region mask)
+        overlap_area = np.sum(region_mask > 0)
+
+        # Calculate the overlap percentage
+        overlap_percentage = (overlap_area / region_area) * 100
+
+        if(overlap_percentage >= overlapPercentMin):
+            self.activateNextRoi()
+
+    def activateNextRoi(self):
+        self.curRoi = self.curRoi + 1
+        self.overlapJumpToNextRoi = False
+        self.overlappingAreaWithNextRoiMask = None
+    
+    def getImageFrameWithRoiOverlap(self, image, overlap_mask):
+        if overlap_mask.size == 0:
+            raise ValueError("Overlap mask is empty.")
+        
+        if image.shape[:2] != overlap_mask.shape:
+            # Resize the overlap mask to match the image dimensions if necessary
+            overlap_mask = cv2.resize(overlap_mask, (image.shape[1], image.shape[0]), interpolation=cv2.INTER_NEAREST)
+        
+        # Convert mask to 3-channel image
+        overlap_colored = cv2.cvtColor(overlap_mask, cv2.COLOR_GRAY2BGR)
+        
+        # Define the color for the overlap (e.g., red)
+        color = (0, 0, 255)  # Red color in BGR
+        overlap_colored[np.where(overlap_mask > 0)] = color  # Apply the color only where the mask is non-zero
+        
+        # Overlay the overlap mask on the original image
+        image_with_overlap = cv2.addWeighted(image, 1.0, overlap_colored, 0.5, 0)
+        
+        return image_with_overlap
+
+
 class Region:
     def __init__(self, points, centroid = None):
         self.l_points = points
         self.centroid = centroid
+        self.selectedAsItem = False
 
     def computeCentroid(self, frameAnalysis):
         x1, y1, x2, y2 = self.l_points
@@ -80,6 +167,9 @@ class Roi:
     def eraseLastPoint(self):
         if self.l_points:
             self.l_points.pop()
+
+    def getLPointsAsPolygon(self):
+        return np.array(self.l_points, np.int32)
     
     def getRoiMaskedFrame(self, frame):
         normalized_masked_frame = frame
@@ -126,7 +216,7 @@ class Roi:
         
         return l_centroids
     
-    def findBrightestRegions(self, frame, num_regions, overlap_threshold):
+    def findBrightestRegions(self, frame, num_regions, overlap_threshold, hasAlreadyFoundRegionsThisFrame = False):
         if (not self.l_points) | (len(self.l_points) < 3):
             return []
 
@@ -196,14 +286,22 @@ class Roi:
             # Invalidate regions that have significant overlap
             mask[y_start:y_end, x_start:x_end] &= (overlap_percent < overlap_threshold)
 
-        self.l_brightestRegionsFound = []
         l_centroids = []
+        numRegionsAlreadyFound = 0
+        if hasAlreadyFoundRegionsThisFrame:
+            numRegionsAlreadyFound = len(self.l_brightestRegionsFound)
+        else:
+            self.l_brightestRegionsFound = []
 
+        curRegionIndex = 0
         for brightestRegion in l_brightestRegions:
-            newRegion = Region(brightestRegion)
-            regionCentroid = newRegion.computeCentroid(frame)
-            self.l_brightestRegionsFound.append(newRegion)
+            if (hasAlreadyFoundRegionsThisFrame is not True) | ((hasAlreadyFoundRegionsThisFrame) & (curRegionIndex >= numRegionsAlreadyFound)):
+                newRegion = Region(brightestRegion)
+                regionCentroid = newRegion.computeCentroid(frame)
+                self.l_brightestRegionsFound.append(newRegion)
 
-            l_centroids.append(regionCentroid)
+                l_centroids.append(regionCentroid)
+
+            curRegionIndex += 1
 
         return l_brightestRegions, l_centroids

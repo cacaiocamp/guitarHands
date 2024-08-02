@@ -5,13 +5,14 @@ from pythonosc import udp_client
 import _1_classes as classes
 import _2_funcs as funcs
 import _3_gvars as gvars
+import _4_pedals as pedals
 
 ip = "127.0.0.1"
 port = 8000  
 client = udp_client.SimpleUDPClient(ip, port)
 
-gvars.l_itensToTrack.append(classes.ItemToTrack("r", [0]))
-gvars.l_itensToTrack.append(classes.ItemToTrack("l", [2]))
+gvars.l_itensToTrack.append(classes.ItemToTrack("r", gvars.l_rightHandRois))
+gvars.l_itensToTrack.append(classes.ItemToTrack("l", gvars.l_leftHandRois))
 
 try:
     cap = cv2.VideoCapture(1)
@@ -46,11 +47,13 @@ try:
         clahe_frame = clahe.apply(frame_gray)
 
         height, width = frame.shape[:2]
+        gvars.frameShape = (width, height)
         allRois_frame = np.zeros((height, width), dtype=np.uint8)
 
         l_alreadyRenderedRois = []
 
         if gvars.itemTrackingLoop:
+            curItemId = 0
             for item in gvars.l_itensToTrack:
                 if item.isActive:   
                     if not item.l_orderedRois[item.curRoi] in l_alreadyRenderedRois:
@@ -97,13 +100,26 @@ try:
                                     cv2.circle(gvars.virginFrame, (predictedCentroid[0], predictedCentroid[1]), 3, (190, 190, 190), 2)
                                     
                                 item.timeNotFindingCloseRegion += 1
+
+                                gvars.l_rois[item.l_orderedRois[item.curRoi]].findBrightestRegions(
+                                    roied_clahe_normalized_frame, 
+                                    gvars.l_rois[item.l_orderedRois[item.curRoi]].numBrightestRegions + item.timeNotFindingCloseRegion,
+                                    gvars.l_rois[item.l_orderedRois[item.curRoi]].overRegionsFactor,
+                                    True #ja tinha encontrado as brightest regions nesse frame para esse roi
+                                )
+
                             else: # se encontrar, 
                                 item.lastRegionFoundAsItem = closestBrightestRegion
+                                item.lastRegionFoundAsItemId = closestBrightestRegionId
+                                gvars.l_rois[item.l_orderedRois[item.curRoi]].l_brightestRegionsFound[closestBrightestRegionId].selectedAsItem = True
 
                                 item.timeNotFindingCloseRegion = 0
                                 item.l_predictedCentroidsAbs = []
 
                             item.lastRegionFoundAsItem.draw(gvars.virginFrame, color, 4, color, 4)
+
+                            if item.overlapJumpToNextRoi:
+                                item.checkItemInNextRoiOverlap()
 
                             if item.type == "r":
                                 x1, y1, x2, y2 = item.lastRegionFoundAsItem.l_points
@@ -147,6 +163,8 @@ try:
                     funcs.drawAlreadyFoundRegionsAndCentroids(gvars.virginFrame, gvars.l_rois[item.l_orderedRois[item.curRoi]].l_brightestRegionsFound)
 
                     l_alreadyRenderedRois.append(item.l_orderedRois[item.curRoi])
+                
+                curItemId += 1
                             
         else: # se nao tiver items a procurar, desenha regioes relacionadas ao roi selecionado
             if gvars.selectedRoiId is not None:
@@ -184,29 +202,43 @@ try:
 
         if key == ord('q'): 
             break
-        elif key in range(ord('1'), ord('9')):  
-            keyIntVal = int(chr(key))
-            
-            if(len(gvars.l_rois) >= keyIntVal):
-                funcs.selectRoi(keyIntVal - 1)
-            else:
-                print(f"somente {len(gvars.l_rois)} rois existem. Criando mais um...")
-                gvars.l_rois.append(classes.Roi(len(gvars.l_rois)))
-                gvars.selectedRoiId = len(gvars.l_rois) - 1
-        elif key == ord('d'):
+
+        # Rois Actions
+        elif key == ord('a'): # add Roi
+            gvars.l_rois.append(classes.Roi(len(gvars.l_rois)))
+            gvars.selectedRoiId = len(gvars.l_rois) - 1
+        elif (key == ord('s')) | (key == ord('+')): # change selected Roi +
+            nextRoi = gvars.selectedRoiId + 1
+            if(nextRoi == len(gvars.l_rois)):
+                nextRoi = 0
+            gvars.selectedRoiId = nextRoi
+            funcs.selectRoi(gvars.selectedRoiId)
+        elif key == ord('-'): # change selected Roi -
+            nextRoi = gvars.selectedRoiId - 1
+            if(nextRoi == -1):
+                nextRoi = len(gvars.l_rois) - 1
+            gvars.selectedRoiId = nextRoi
+            funcs.selectRoi(gvars.selectedRoiId)
+        elif key == ord('d'): # delete Roi points
             gvars.l_rois[gvars.selectedRoiId].eraseAllPoints()
-        elif key == ord('p'):
+        elif key == ord('p'): # save rois in pickle
             with open('savedRois.pkl', 'wb') as file:
                 pickle.dump(gvars.l_rois, file)
                 print(gvars.l_rois)
                 print("saved rois file--------------------")
-        elif key == ord('ç'):
+        elif key == ord('ç'): # load rois from pickle
             with open('savedRois.pkl', 'rb') as file:
                 gvars.l_rois = pickle.load(file)
                 print("loaded rois file--------------------")
 
                 if len(gvars.l_rois) > 0:
                     gvars.selectedRoiId = 0
+        #--------------------------------------------------
+        elif key == ord('*'):
+            gvars.curPedal = gvars.curPedal + 1
+            pedals.callPedalEvent(gvars.curPedal)
+        elif key == ord('/'):
+            print('a')
         elif key == ord(' '):
             gvars.itemTrackingLoop = not gvars.itemTrackingLoop 
         elif key == ord('y'): # rightHand
@@ -239,21 +271,49 @@ try:
         elif key == ord('r'): 
             if len(gvars.l_itensToTrack) >= 2:
                 gvars.l_itensToTrack[1].l_orderedRois = [1]
+                gvars.l_itensToTrack[1].isChangingRoi = True
         elif key == ord('t'): 
             if len(gvars.l_itensToTrack) >= 2:
-                gvars.l_itensToTrack[1].l_orderedRois = [2]
-        elif key == ord('z'): 
+                gvars.l_itensToTrack[1].l_orderedRois = [0]
+        elif key == ord('x'): # rightHand
             if len(gvars.l_itensToTrack) >= 1:
-                gvars.l_itensToTrack[0].isProjecting = not gvars.l_itensToTrack[0].isProjecting
-                client.send_message("/rh/isDrawing", int(gvars.l_itensToTrack[0].isProjecting))
-        elif key == ord('x'): 
+                gvars.curItem = 0
+        elif key == ord('c'): # leftHand
             if len(gvars.l_itensToTrack) >= 2:
-                gvars.l_itensToTrack[1].isProjecting = not gvars.l_itensToTrack[1].isProjecting
-                client.send_message("/lh/isDrawing", int(gvars.l_itensToTrack[1].isProjecting))
-        elif key == ord('c'): 
+                gvars.curItem = 1
+        elif key == ord('v'): # voluta
             if len(gvars.l_itensToTrack) >= 3:
-                gvars.l_itensToTrack[2].isProjecting = not gvars.l_itensToTrack[2].isProjecting
-                client.send_message("/vl/isDrawing", int(gvars.l_itensToTrack[2].isProjecting))
+                gvars.curItem = 2
+        elif key in range(ord('1'), ord('4')):  
+            gvars.curItem = 1
+            keyIntVal = int(chr(key)) - 1
+            
+            curRoi = gvars.l_itensToTrack[gvars.curItem].l_orderedRois[gvars.l_itensToTrack[gvars.curItem].curRoi]
+
+            if keyIntVal < len(gvars.l_rois[curRoi].l_brightestRegionsFound):
+                gvars.l_rois[curRoi].l_brightestRegionsFound[keyIntVal]
+
+                gvars.l_itensToTrack[gvars.curItem].lastRegionFoundAsItem = gvars.l_rois[curRoi].l_brightestRegionsFound[keyIntVal]
+                gvars.l_itensToTrack[gvars.curItem].lastRegionFoundAsItemId = keyIntVal
+                gvars.l_rois[curRoi].l_brightestRegionsFound[keyIntVal].selectedAsItem = True
+
+                item.timeNotFindingCloseRegion = 0
+                item.l_predictedCentroidsAbs = []
+        elif key in range(ord('4'), ord('7')):  
+            gvars.curItem = 0
+            keyIntVal = int(chr(key)) - 4
+            
+            curRoi = gvars.l_itensToTrack[gvars.curItem].l_orderedRois[gvars.l_itensToTrack[gvars.curItem].curRoi]
+
+            if keyIntVal < len(gvars.l_rois[curRoi].l_brightestRegionsFound):
+                gvars.l_rois[curRoi].l_brightestRegionsFound[keyIntVal]
+
+                gvars.l_itensToTrack[gvars.curItem].lastRegionFoundAsItem = gvars.l_rois[curRoi].l_brightestRegionsFound[keyIntVal]
+                gvars.l_itensToTrack[gvars.curItem].lastRegionFoundAsItemId = keyIntVal
+                gvars.l_rois[curRoi].l_brightestRegionsFound[keyIntVal].selectedAsItem = True
+
+                item.timeNotFindingCloseRegion = 0
+                item.l_predictedCentroidsAbs = []
 
 except Exception as e:
     print(f"An error occurred: {e}")

@@ -85,7 +85,7 @@ def findClosestPoint(regions, targetCentroidsAbs, maxDistance = 50):
     centroidsAbsolute = np.array([
         (region.centroid[0] + region.l_points[0], region.centroid[1] + region.l_points[1]) 
         for region in regions
-        if region.centroid is not None
+        if (region.centroid is not None)
     ])
     
     # Compute the pairwise distances between all target centroids and all main centroids
@@ -183,13 +183,6 @@ def drawBrightestRegions(frameD, l_regionsToDraw):
                 sizeRect = 0
                 colorCentroid = (200, 200, 200)
                 sizeCentroid = 0
-
-
-
-
-
-
-
 
 # ---- funcoes inutilizadas por hora
 
